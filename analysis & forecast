@@ -1,0 +1,86 @@
+# install packages
+library(vars)
+library(tseries)
+library(urca)
+library(tsDyn)
+
+# ambil data Jan 2019 - Nov 2022 aja
+dataset = Dataset_Forecasting[c(13:59),c(1:6)]
+View(dataset)
+
+# visualisasi data
+plot(dataset$Month,dataset$`Pageviews non Aggregator`,type = "l",col = "red",
+     xlab ="periode", ylab ="Pageviews",main ="Trend Pageviews")
+plot(dataset$Month,dataset$FBIA,type = "l",col = "red",
+     xlab ="periode", ylab ="FBIA",main ="Trend FBIA")
+plot(dataset$Month,dataset$`Isu Besar`,type = "l",col = "red",
+     xlab ="periode", ylab ="Isu Besar",main ="Trend Isu Besar")
+plot(dataset$Month,dataset$`Video Views`,type = "l",col = "red",
+     xlab ="periode", ylab ="Video Views",main ="Trend Video")
+
+# uji kestasioneran data (uji ADF)
+adf.test(dataset$`Pageviews non Aggregator`)
+adf.test(dataset$FBIA)
+adf.test(dataset$`Isu Besar`)
+adf.test(dataset$`Video Views`)
+
+# differencing
+dpv = diff(dataset$`Pageviews non Aggregator`)
+adf.test(dpv)
+disu = diff(dataset$`Isu Besar`)
+adf.test(disu)
+dvideo = diff(dataset$`Video Views`)
+adf.test(dvideo)
+
+# menyatukan data
+pv_non_aggregator = dataset$`Pageviews non Aggregator`
+isu_besar = dataset$`Isu Besar`
+video_views = dataset$`Video Views`
+data_vecm = cbind(pv_non_aggregator,isu_besar,video_views)
+data_vecm
+dvecm = cbind(dpv,disu,dvideo)
+dvecm
+View(dvecm)
+
+# menentukan lag optimum
+VARselect(dvecm, type = "const")
+
+# uji stabilitas model 
+ujimodel = VAR(dvecm, type ="const")
+roots(ujimodel)[[1]]
+roots(ujimodel)[[2]]
+roots(ujimodel)[[3]]
+
+# analisis kointegrasi Johansen
+cointest = ca.jo(dvecm, type = "eigen", K = 10, 
+                 ecdet = "const", spec = "transitory")
+summary(cointest)
+
+# model VECM
+vecm = cajorls(cointest)
+summary(vecm$rlm)
+
+# analisis kausalitas granger
+kausal = VAR(data.frame(data_vecm), type = "const", lag.max = 10, ic = "AIC")
+causality(kausal)
+
+# analisis IRF
+model = VAR(data.frame(dvecm), type = "const", lag.max = 10, ic = "AIC")
+irf(model, n.ahead = 10)
+plot(irf(model, n.ahead = 10))
+
+model_asli = VAR(data.frame(data_vecm), type = "const", lag.max = 10, ic ="AIC")
+model_vecm = VECM(data_vecm, 10, r = 1, estim = ("2OLS"))
+summary(model_vecm)
+model1 = vec2var(cointest, r =1)
+
+# analisis FEVD
+vd = fevd(model, n.ahead = 10)
+vd
+plot(vd, col = c("red","green","blue"))
+
+# peramalan
+forecast = predict(model_asli, n.ahead = 13, ci = 0.95)
+forecast
+
+fanchart(forecast)
